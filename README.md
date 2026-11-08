@@ -42,6 +42,8 @@ Rule: nothing gets automated until every sensor and actuator has passed its indi
 | Pump PSU | Mean Well GST25E12-P1J (12 V, 2.08 A) |
 | Tank level (Milestone 3) | DFRobot SEN0204 |
 
+Layout: single level, about 33 × 25 cm footprint and 35–45 cm tall with plants — 12 cm pots in front, a low 1.5–2 L tank behind them with both pumps on its lid, and the electronics box on the side. Pump outlets sit at least 3 cm above the tank's max water level, so no siphon or check valves are needed.
+
 Full BOM, compatibility checks and diagrams: see `docs/continuity/`.
 
 ## Pin map
