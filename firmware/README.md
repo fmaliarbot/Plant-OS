@@ -23,7 +23,7 @@ Every firmware drives GPIO 25 and 26 (pumps) LOW as the first instruction in `se
 pio test -e native
 ```
 
-Expected: `17 Tests 0 Failures`. Do not move on to hardware if anything fails. CI runs the same tests on every push.
+Expected: 40 test cases, 0 failures (17 in `test_plantcore`, 23 in `test_environment`). Do not move on to hardware if anything fails. CI runs the same tests on every push.
 
 ## 3. Flash a milestone
 
@@ -53,7 +53,25 @@ Status values: `OK`, `UNCALIBRATED`, `LOW_IMPLAUSIBLE`, `HIGH_SATURATED`, `NOISY
 
 ### Milestone 2 — commands
 
-`i` rescans the I2C bus, `p` pauses. CSV output: `t_ms,temp_c,rh_pct,pressure_hpa,lux,bme_status,lux_status`. Status values: `OK`, `OUT_OF_RANGE`, `READ_ERROR`, `NOT_FOUND`.
+```
+pio run -e m2_environment -t upload
+pio device monitor
+```
+
+| Command | Action |
+|---|---|
+| `i` | Rescan the I2C bus. |
+| `s` | 60 s climate stability test. Leave the BME280 untouched; do not breathe on it. |
+| `l` | Guided light test: 5 s ambient baseline, then cover the BH1750 with your hand, then point a phone flashlight at it. Follow the prompts. |
+| `r` | Link report: outages and recoveries per sensor since boot (reconnect test). |
+| `x` | Abort a running test. |
+| `p` | Pause / resume streaming. |
+
+CSV output: `t_ms,temp_c,rh_pct,pressure_hpa,lux,bme_status,lux_status`. CSV is muted while the light test runs.
+
+Status values: `OK`, `NOT_FOUND`, `WRONG_CHIP` (a BMP280 or other chip at 0x76/0x77; no humidity), `READ_ERROR`, `OUT_OF_RANGE`, `SATURATED` (BH1750 at the top of its ~54 600 lx range).
+
+The BME280 runs in **forced mode with x1 oversampling**: it takes one conversion per read and sleeps in between, so it does not warm itself. Unplug/replug events are printed as `# EVENT: BME280 LOST` / `RECOVERED after N s`.
 
 ## 4. Pass criteria
 
@@ -68,18 +86,20 @@ Numeric thresholds are **initial assumptions** and will be tuned with measured d
 6. Cross-check: moving or wetting only sensor 1 does not change sensor 2.
 
 **Milestone 2**
-1. Scan shows `0x23` and `0x77`, and the BME280 reports chip id `0x60` (a BMP280 reports a different id and has no humidity).
-2. Temperature within about ±2 °C of a reference thermometer (estimate).
-3. Covering the BH1750 drops lux near 0; a phone flashlight raises it sharply.
-4. Unplugging the STEMMA QT cable switches status to `NOT_FOUND` / `READ_ERROR`; it recovers on reconnect.
+1. Scan shows `0x23` and `0x77`, and the boot line says `BME280: OK (... chip id 0x60 ...)`. `WRONG_CHIP` means the board is not a real BME280.
+2. Temperature within about ±2 °C of a reference thermometer placed next to it (estimate).
+3. `s` with the sensor undisturbed: `STABILITY: PASS` (temperature sd ≤ 0.2 °C, humidity sd ≤ 1 %).
+4. `l` in a lit room: `LIGHT: PASS` (covered ≤ max(5 lx, 10 % of baseline); flashlight ≥ 3× baseline and ≥ 100 lx). `INCONCLUSIVE` means the room is too dark: turn on a lamp.
+5. Unplug the STEMMA QT cable ~10 s, plug it back: both sensors print `LOST` then `RECOVERED`, and `r` says `RECONNECT TEST: PASS`.
 
 ## 5. Layout
 
 ```
 include/pins.h           pin map (single source of truth)
 include/pump_safety.h    pumps LOW at boot
-lib/plantcore/           pure logic: filtering, calibration, validation, statistics
+lib/plantcore/           pure logic: filtering, calibration, validation, statistics, environment
 src/m1_soil/             Milestone 1 firmware
 src/m2_environment/      Milestone 2 firmware
-test/test_plantcore/     unit tests (Unity)
+test/test_plantcore/     unit tests: soil logic (Unity)
+test/test_environment/   unit tests: environment logic (Unity)
 ```
